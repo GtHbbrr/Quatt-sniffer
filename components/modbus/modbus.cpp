@@ -50,19 +50,37 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   const uint8_t *raw = &this->rx_buffer_[0];
   ESP_LOGVV(TAG, "Modbus received Byte %d (0X%x)", byte, byte);
 
-  if (at == 0) // Byte 0: Modbus address (expect 0x01)
-    return byte == 0x01;
+  // If we have an expected packet length, wait until we have all bytes
+  if (this->expected_packet_len_ > 0) {
+    if (at + 1 < this->expected_packet_len_) {
+      return true; // Keep accumulating bytes
+    }
+    if (at + 1 > this->expected_packet_len_) {
+      ESP_LOGV(TAG, "Discarding packet: size=%d exceeds expected=%d", at + 1, this->expected_packet_len_);
+      this->rx_buffer_.clear();
+      this->expected_packet_len_ = 0;
+      return false;
+    }
+  }
 
-  if (at == 1) // Byte 1: Function code (expect 0x03 or 0x06)
+  if (at == 0) { // Byte 0: Modbus address (expect 0x01)
+    this->expected_packet_len_ = 0; // Reset expected length
+    return byte == 0x01;
+  }
+
+  if (at == 1) { // Byte 1: Function code (expect 0x03 or 0x06)
     return raw[1] == 0x03 || raw[1] == 0x06;
+  }
 
   uint8_t address = raw[0];
   uint8_t function_code = raw[1];
-  uint8_t data_len = 0;
-  uint8_t data_offset = 3;
 
-  if (at == 2) // Byte 2: Data length for 0x03, register high byte for 0x06
+  if (at == 2) { // Byte 2: Data length for 0x03, register high byte for 0x06
+    if (function_code == 0x03 && raw[2] == 0x50) {
+      this->expected_packet_len_ = 85; // 84 bytes + current byte
+    }
     return true;
+  }
 
   if (at < 4) {
     ESP_LOGV(TAG, "Discarding small packet: size=%d", at + 1);
@@ -76,6 +94,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     if (register_addr != 0x07CF && register_addr != 0x07DA && register_addr != 0x07DF && register_addr != 0x0F9F) {
       ESP_LOGV(TAG, "Discarding invalid write register: 0x%04X", register_addr);
       this->rx_buffer_.clear();
+      this->expected_packet_len_ = 0;
       return false;
     }
 
@@ -83,51 +102,61 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       if (!this->check_crc(address, function_code, raw, 6)) {
         ESP_LOGV(TAG, "Clearing buffer of %d bytes - CRC failed", at + 1);
         this->rx_buffer_.clear();
+        this->expected_packet_len_ = 0;
         return false;
       }
       ESP_LOGD(TAG, "Good write packet for address=%d, register=0x%04X", address, register_addr);
       this->rx_buffer_.clear();
+      this->expected_packet_len_ = 0;
       return true;
     }
   } else if (function_code == 0x03) { // Read holding registers
     if (at == 3) {
-      if (raw[2] == 0x08 && raw[3] == 0x33) return true;
+      if (raw[2] == 0x08 && raw[3] == 0x33) {
+        this->expected_packet_len_ = 8; // Read request is 8 bytes
+        return true;
+      }
       ESP_LOGV(TAG, "Discarding invalid read request: start=0x%02X%02X", raw[2], raw[3]);
       this->rx_buffer_.clear();
+      this->expected_packet_len_ = 0;
       return false;
     }
-    if (at == 5) {
+    if (at == 5 && raw[2] == 0x08) {
       if (raw[4] == 0x00 && raw[5] == 0x28) return true;
       ESP_LOGV(TAG, "Discarding invalid read count: 0x%02X%02X", raw[4], raw[5]);
       this->rx_buffer_.clear();
+      this->expected_packet_len_ = 0;
       return false;
     }
     if (at == 7 && raw[2] == 0x08) {
       if (!this->check_crc(address, function_code, raw, 6)) {
         ESP_LOGV(TAG, "Clearing buffer of %d bytes - CRC failed", at + 1);
         this->rx_buffer_.clear();
+        this->expected_packet_len_ = 0;
         return false;
       }
       ESP_LOGD(TAG, "Good read request for address=%d, start=0x0833, count=40", address);
       this->rx_buffer_.clear();
+      this->expected_packet_len_ = 0;
       return true;
     }
-    if (at == 2 && raw[2] == 0x50) return true;
-    if (at < 84 && raw[2] == 0x50) return true;
-    if (at == 84 && raw[2] == 0x50) {
+    if (this->expected_packet_len_ == 85 && at == 84 && raw[2] == 0x50) {
       if (!this->check_crc(address, function_code, raw, 83)) {
         ESP_LOGV(TAG, "Clearing buffer of %d bytes - CRC failed", at + 1);
         this->rx_buffer_.clear();
+        this->expected_packet_len_ = 0;
         return false;
       }
       ESP_LOGD(TAG, "Good read response for address=%d, 40 registers", address);
       this->rx_buffer_.clear();
+      this->expected_packet_len_ = 0;
       return true;
     }
   }
 
   ESP_LOGV(TAG, "Discarding unknown packet: size=%d, FC=0x%02X", at + 1, function_code);
   this->rx_buffer_.clear();
+  this->expected_packet_len_ = 0;
   return false;
 }
 
