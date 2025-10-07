@@ -6,6 +6,8 @@ Reusing the framework of modbus and modbus_controller we introduce the role `sni
 By using the `register_count` concept, we create the same register-ranges as are present on the bus.  
 For Quatt, there are four write commands (FC=6) and one read command (FC=3)
 
+The YAML adjustments in this fork aim to improve the handling of noisy UART data and ensure accurate parsing of Modbus packets.
+
 ## Setup
 - disable the physical TX hardware in case your RS485-board does not have an explicit TX pin (aka auto TX mode)!!!
 - for best performance, remove a 120 ohm resistor between A and B that might be present in the sniffer board
