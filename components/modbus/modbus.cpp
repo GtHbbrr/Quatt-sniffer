@@ -64,7 +64,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   }
 
   if (at == 0) { // Byte 0: Modbus address (expect 0x01)
-    this->expected_packet_len_ = 0; // Reset expected length
+    this->expected_packet_len_ = 0;
     return byte == 0x01;
   }
 
@@ -78,12 +78,14 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   if (at == 2) { // Byte 2: Data length for 0x03, register high byte for 0x06
     if (function_code == 0x03 && raw[2] == 0x50) {
       this->expected_packet_len_ = 85; // 84 bytes + current byte
+    } else if (function_code == 0x03 && raw[2] == 0x08) {
+      this->expected_packet_len_ = 8; // Read request is 8 bytes
     }
     return true;
   }
 
   if (at < 4) {
-    ESP_LOGV(TAG, "Discarding small packet: size=%d", at + 1);
+    ESP_LOGV(TAG, "Accumulating packet: size=%d", at + 1);
     return true;
   }
 
@@ -111,9 +113,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       return true;
     }
   } else if (function_code == 0x03) { // Read holding registers
-    if (at == 3) {
-      if (raw[2] == 0x08 && raw[3] == 0x33) {
-        this->expected_packet_len_ = 8; // Read request is 8 bytes
+    if (at == 3 && raw[2] == 0x08) {
+      if (raw[3] == 0x33) {
         return true;
       }
       ESP_LOGV(TAG, "Discarding invalid read request: start=0x%02X%02X", raw[2], raw[3]);
@@ -122,13 +123,15 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       return false;
     }
     if (at == 5 && raw[2] == 0x08) {
-      if (raw[4] == 0x00 && raw[5] == 0x28) return true;
+      if (raw[4] == 0x00 && raw[5] == 0x28) {
+        return true;
+      }
       ESP_LOGV(TAG, "Discarding invalid read count: 0x%02X%02X", raw[4], raw[5]);
       this->rx_buffer_.clear();
       this->expected_packet_len_ = 0;
       return false;
     }
-    if (at == 7 && raw[2] == 0x08) {
+    if (at == 7 && raw[2] == 0x08 && this->expected_packet_len_ == 8) {
       if (!this->check_crc(address, function_code, raw, 6)) {
         ESP_LOGV(TAG, "Clearing buffer of %d bytes - CRC failed", at + 1);
         this->rx_buffer_.clear();
