@@ -8,6 +8,16 @@ namespace modbus {
 
 static const char *const TAG = "modbus";
 
+void Modbus::setup() {
+  if (this->current_role_ == ModbusRole::SNIFFER)
+    this->current_role_ = ModbusRole::SERVER;
+  else
+    this->current_role_ = this->role;
+  if (this->flow_control_pin_ != nullptr) {
+    this->flow_control_pin_->setup();
+  }
+}
+
 void Modbus::loop() {
   const uint32_t now = App.get_loop_component_start_time();
 
