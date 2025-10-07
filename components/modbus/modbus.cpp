@@ -134,7 +134,8 @@ bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, s
   uint16_t computed_crc = crc16(data, data_len);
   uint16_t received_crc = (data[data_len] << 8) | data[data_len + 1];
   if (computed_crc != received_crc) {
-    std::string reg_info = (function == 0x06) ? format_hex((data[2] << 8) | data[3]) : "read response";
+    uint16_t reg_addr = (function == 0x06) ? ((data[2] << 8) | data[3]) : 0;
+    std::string reg_info = (function == 0x06) ? format_hex(static_cast<uint16_t>(reg_addr)) : "read response";
     ESP_LOGW(TAG, "Modbus CRC Check failed! Expected %04X, received %04X for address=%d, function=%d, register=%s",
              computed_crc, received_crc, address, function, reg_info.c_str());
     return false;
