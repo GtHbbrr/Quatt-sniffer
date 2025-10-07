@@ -34,7 +34,8 @@ void Modbus::loop() {
     }
   }
 
-  if (now - this->last_modbus_byte_ > 50) {
+  // increased max time for time out to 200ms, was 50ms
+  if (now - this->last_modbus_byte_ > 200) {
     size_t at = this->rx_buffer_.size();
     if (at > 0) {
       ESP_LOGW(TAG, "Clearing bufferT of %d bytes - timeout", at);
