@@ -20,7 +20,7 @@ wifi:
 
 substitutions:
   throttling_value: 30s    ##When set to 0s, new reading every second! Increased to 30 seconds for NOISY uart
-  uart_rx_pin: GPIO20     ## select if you override the package value
+  #uart_rx_pin: GPIOxx     ## select if you override the package value
 
 packages:
   ## Uncomment one ESP-line below that represents your chipset
