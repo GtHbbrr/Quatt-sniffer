@@ -19,7 +19,7 @@ wifi:
   password: !secret wifi_password
 
 substitutions:
-  throttling_value: 10s    ##When set to 0s, new reading every second!
+  throttling_value: 30s    ##When set to 0s, new reading every second! Increased to 30 seconds for NOISY uart
   #uart_rx_pin: GPIOxx     ## select if you override the package value
 
 packages:
