@@ -46,6 +46,8 @@ class Modbus : public uart::UARTDevice, public Component {
   uint32_t timeout_{300};
   ModbusRole current_role_;
   bool parse_modbus_byte_(uint8_t byte);
+  bool check_crc(uint8_t address, uint8_t function, const uint8_t *data, size_t data_len);
+  uint16_t crc16(const uint8_t *data, uint8_t len);
   uint16_t send_wait_time_{250};
   bool disable_crc_;
   std::vector<uint8_t> rx_buffer_;
