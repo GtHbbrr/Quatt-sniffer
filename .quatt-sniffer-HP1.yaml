@@ -55,7 +55,6 @@ modbus:
   uart_id: uart_bus
   id: mod_bus
   role: sniffer
-  disable_crc: true
 
 modbus_controller:
 - id: modbus_device_1
