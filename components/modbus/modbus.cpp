@@ -144,6 +144,22 @@ bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, s
   return true;
 }
 
+uint16_t Modbus::crc16(const uint8_t *data, uint8_t len) {
+  uint16_t crc = 0xFFFF;
+  for (uint8_t pos = 0; pos < len; pos++) {
+    crc ^= (uint16_t) data[pos];
+    for (uint8_t i = 8; i != 0; i--) {
+      if ((crc & 0x0001) != 0) {
+        crc >>= 1;
+        crc ^= 0xA001;
+      } else {
+        crc >>= 1;
+      }
+    }
+  }
+  return crc;
+}
+
 void Modbus::dump_config() {
   ESP_LOGCONFIG(TAG, "Modbus:");
   ESP_LOGCONFIG(TAG, "Version: 1.1.X");
