@@ -19,7 +19,7 @@ logger:
                                         ## However, in sniffer mode and with detached TX hardware trace this is not needed
   level: DEBUG
   logs:
-    uart_debug: ERROR                   ## suppress log-messages from uart
+    uart_debug: DEBUG                   ## suppress log-messages from uart
     modbus: WARN                        ## suppress log-messages from modbus
     modbus_controller.sensor: WARN      ## suppress log-messages from modbus_controller.sensor
     sensor: WARN                        ## suppress log-messages from modbus_controller
