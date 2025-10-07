@@ -17,23 +17,23 @@ external_components:
 #logger:
   #baud_rate: 0                         ## Turn off logging via UART (set baudrate to 0) in case the RS485 uses the onboard UART (tx/rx)
                                         ## However, in sniffer mode and with detached TX hardware trace this is not needed
-#  level: DEBUG
-#  logs:
-#    uart_debug: DEBUG                   ## suppress log-messages from uart
-#    modbus: WARN                        ## suppress log-messages from modbus
-#    modbus_controller.sensor: WARN      ## suppress log-messages from modbus_controller.sensor
-#    sensor: WARN                        ## suppress log-messages from modbus_controller
-
-logger:
-  level: VERY_VERBOSE
+  level: DEBUG
   logs:
-    modbus: VERY_VERBOSE  # Capture CRC errors and timeouts
-    modbus_controller: VERY_VERBOSE  # Capture sensor update failures
-    modbus_controller.sensor: VERY_VERBOSE  # Ensure sensor-specific errors
-    sensor: VERBOSE  # Keep for sensor updates
-    binary_sensor: VERBOSE  # For status bits
-    uart_debug: DEBUG  # Reduce verbosity to prioritize modbus
-  log_buffer_size: 8192  # Increase from default 768    
+    uart_debug: DEBUG                   ## suppress log-messages from uart
+    modbus: WARN                        ## suppress log-messages from modbus
+    modbus_controller.sensor: WARN      ## suppress log-messages from modbus_controller.sensor
+    sensor: WARN                        ## suppress log-messages from modbus_controller
+  
+#logger:
+#  level: VERY_VERBOSE
+#  logs:
+#    modbus: VERY_VERBOSE  # Capture CRC errors and timeouts
+#    modbus_controller: VERY_VERBOSE  # Capture sensor update failures
+#    modbus_controller.sensor: VERY_VERBOSE  # Ensure sensor-specific errors
+#    sensor: VERBOSE  # Keep for sensor updates
+#    binary_sensor: VERBOSE  # For status bits
+#    uart_debug: DEBUG  # Reduce verbosity to prioritize modbus
+#  log_buffer_size: 8192  # Increase from default 768    
 
 # Configuration of UART with Quatt modbus connection-parameters
 uart:
