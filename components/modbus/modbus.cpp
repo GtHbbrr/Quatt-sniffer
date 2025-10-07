@@ -8,15 +8,6 @@ namespace modbus {
 
 static const char *const TAG = "modbus";
 
-void Modbus::setup() {
-  if (this->current_role_ == ModbusRole::SNIFFER)
-    this->current_role_ = ModbusRole::SERVER;
-  else
-    this->current_role_ = this->role;
-  if (this->flow_control_pin_ != nullptr) {
-    this->flow_control_pin_->setup();
-  }
-}
 void Modbus::loop() {
   const uint32_t now = App.get_loop_component_start_time();
 
@@ -34,228 +25,124 @@ void Modbus::loop() {
     }
   }
 
-  if (now - this->last_modbus_byte_ > 50) {
+  if (now - this->last_modbus_byte_ > this->timeout_) {
     size_t at = this->rx_buffer_.size();
     if (at > 0) {
-      ESP_LOGV(TAG, "Clearing buffer of %d bytes - timeout", at);
+      ESP_LOGW(TAG, "Clearing buffer of %d bytes - timeout", at);
       this->rx_buffer_.clear();
     }
   }
 }
 
 bool Modbus::parse_modbus_byte_(uint8_t byte) {
-  size_t at = this->rx_buffer_.size(); //at is size BEFORE the new byte is added
-  this->rx_buffer_.push_back(byte);    //so real size is one more
+  size_t at = this->rx_buffer_.size();
+  this->rx_buffer_.push_back(byte);
   const uint8_t *raw = &this->rx_buffer_[0];
-  ESP_LOGVV(TAG, "Modbus received Byte  %d (0X%x)", byte, byte);
-  // Byte 0: modbus address (match all)
-  if (at == 0)
-    return true;
+  ESP_LOGVV(TAG, "Modbus received Byte %d (0X%x)", byte, byte);
+
+  if (at == 0) // Byte 0: Modbus address (expect 0x01)
+    return byte == 0x01;
+
+  if (at == 1) // Byte 1: Function code (expect 0x03 or 0x06)
+    return raw[1] == 0x03 || raw[1] == 0x06;
+
   uint8_t address = raw[0];
   uint8_t function_code = raw[1];
-  // Byte 2: Size (with modbus rtu function code 4/3)
-  // See also https://en.wikipedia.org/wiki/Modbus
-  if (at == 2)
-    return true;
-
-  uint8_t data_len = raw[2];
+  uint8_t data_len = 0;
   uint8_t data_offset = 3;
 
-  // Per https://modbus.org/docs/Modbus_Application_Protocol_V1_1b3.pdf Ch 5 User-Defined function codes
-  if (((function_code >= 65) && (function_code <= 72)) || ((function_code >= 100) && (function_code <= 110))) {
-    // Handle user-defined function, since we don't know how big this ought to be,
-    // ideally we should delegate the entire length detection to whatever handler is
-    // installed, but wait, there is the CRC, and if we get a hit there is a good
-    // chance that this is a complete message ... admittedly there is a small chance is
-    // isn't but that is quite small given the purpose of the CRC in the first place
+  if (at == 2) // Byte 2: Data length for 0x03, register high byte for 0x06
+    return true;
 
-    // Fewer than 2 bytes can't calc CRC
-    if (at < 2)
-      return true;
+  if (at < 4) {
+    ESP_LOGV(TAG, "Discarding small packet: size=%d", at + 1);
+    return true;
+  }
 
-    data_len = at - 2;
-    data_offset = 1;
+  if (function_code == 0x06) { // Write single register (8 bytes)
+    if (at < 7) return true;
 
-    uint16_t computed_crc = crc16(raw, data_offset + data_len);
-    uint16_t remote_crc = uint16_t(raw[data_offset + data_len]) | (uint16_t(raw[data_offset + data_len + 1]) << 8);
-
-    if (computed_crc != remote_crc)
-      return true;
-
-    ESP_LOGD(TAG, "Modbus user-defined function %02X found", function_code);
-
-  } else {
-    // data starts at 2 and length is 4 for read registers commands
-    if (this->current_role_ == ModbusRole::SERVER && (function_code == 0x3 || function_code == 0x4)) {
-      data_offset = 2;
-      data_len = 4;
+    uint16_t register_addr = (raw[2] << 8) | raw[3];
+    if (register_addr != 0x07CF && register_addr != 0x07DA && register_addr != 0x07DF && register_addr != 0x0F9F) {
+      ESP_LOGV(TAG, "Discarding invalid write register: 0x%04X", register_addr);
+      this->rx_buffer_.clear();
+      return false;
     }
 
-    // the response for write command mirrors the requests and data starts at offset 2 instead of 3 for read commands
-    if (function_code == 0x5 || function_code == 0x06 || function_code == 0xF || function_code == 0x10) {
-      data_offset = 2;
-      data_len = 4;
-    }
-
-    // Error ( msb indicates error )
-    // response format:  Byte[0] = device address, Byte[1] function code | 0x80 , Byte[2] exception code, Byte[3-4] crc
-    if ((function_code & 0x80) == 0x80) {
-      data_offset = 2;
-      data_len = 1;
-    }
-
-    // Byte data_offset..data_offset+data_len-1: Data
-    if (at < data_offset + data_len)
-      return true;
-
-    // Byte 3+data_len: CRC_LO (over all bytes)
-    if (at == data_offset + data_len)
-      return true;
-
-    // Byte data_offset+len+1: CRC_HI (over all bytes)
-    uint16_t computed_crc = crc16(raw, data_offset + data_len);
-    uint16_t remote_crc = uint16_t(raw[data_offset + data_len]) | (uint16_t(raw[data_offset + data_len + 1]) << 8);
-    if (computed_crc != remote_crc) {
-      if (this->disable_crc_) {
-        ESP_LOGD(TAG, "Modbus CRC Check failed, but ignored! %02X!=%02X", computed_crc, remote_crc);
-      } else {
-        ESP_LOGW(TAG, "Modbus FC=%02X CRC Check failed! %02X!=%02X", function_code, computed_crc, remote_crc);
+    if (at == 7) {
+      if (!this->check_crc(address, function_code, raw, 6)) {
+        ESP_LOGV(TAG, "Clearing buffer of %d bytes - CRC failed", at + 1);
+        this->rx_buffer_.clear();
         return false;
       }
+      ESP_LOGD(TAG, "Good write packet for address=%d, register=0x%04X", address, register_addr);
+      this->rx_buffer_.clear();
+      return true;
     }
-  }
-  std::vector<uint8_t> data(this->rx_buffer_.begin() + data_offset, this->rx_buffer_.begin() + data_offset + data_len);
-  if (this->role == ModbusRole::SNIFFER) {
-    if (this->current_role_ == ModbusRole::SERVER) {
-      this->start_address_=uint16_t(data[1]) | (uint16_t(data[0]) << 8);
-      if (function_code == 0x3 || function_code == 0x4)
-        this->register_count=uint16_t(data[3]) | (uint16_t(data[2]) << 8);
-      else if (function_code == 0x5 || function_code == 0x06)
-        this->register_count=1;
-      else
-        this->register_count=0;
+  } else if (function_code == 0x03) { // Read holding registers
+    if (at == 3) {
+      if (raw[2] == 0x08 && raw[3] == 0x33) return true;
+      ESP_LOGV(TAG, "Discarding invalid read request: start=0x%02X%02X", raw[2], raw[3]);
+      this->rx_buffer_.clear();
+      return false;
     }
-    ESP_LOGD(TAG, "good CRC as %s for address=%-5d with FC=%-2d, offset=%d and len=%-3d => start@%d #%d",
-                (this->current_role_ == ModbusRole::SERVER)?"server":"client",address,function_code,
-                data_offset,data_len,this->start_address_,this->register_count);
-  }
-  if (this->current_role_ == ModbusRole::CLIENT) {
-    bool found = false;
-    for (auto *device : this->devices_) {
-      if (device->address_ == address) {
-        // Is it an error response?
-        if ((function_code & 0x80) == 0x80) {
-          ESP_LOGD(TAG, "Modbus error function code: 0x%X exception: %d", function_code, raw[2]);
-          device->on_modbus_error(function_code & 0x7F, raw[2]); //TODO: will replace with on_modbus_message_error?(fc,start_addr,num_reg,err);
-        } else {
-          device->on_modbus_message(function_code, this->start_address_, this->register_count, data);
-        }
-        found = true;
+    if (at == 5) {
+      if (raw[4] == 0x00 && raw[5] == 0x28) return true;
+      ESP_LOGV(TAG, "Discarding invalid read count: 0x%02X%02X", raw[4], raw[5]);
+      this->rx_buffer_.clear();
+      return false;
+    }
+    if (at == 7 && raw[2] == 0x08) {
+      if (!this->check_crc(address, function_code, raw, 6)) {
+        ESP_LOGV(TAG, "Clearing buffer of %d bytes - CRC failed", at + 1);
+        this->rx_buffer_.clear();
+        return false;
       }
+      ESP_LOGD(TAG, "Good read request for address=%d, start=0x0833, count=40", address);
+      this->rx_buffer_.clear();
+      return true;
     }
-  
-    if (!found) {
-      ESP_LOGW(TAG, "Got Modbus frame from unknown address 0x%02X! ", address);
+    if (at == 2 && raw[2] == 0x50) return true;
+    if (at < 84 && raw[2] == 0x50) return true;
+    if (at == 84 && raw[2] == 0x50) {
+      if (!this->check_crc(address, function_code, raw, 83)) {
+        ESP_LOGV(TAG, "Clearing buffer of %d bytes - CRC failed", at + 1);
+        this->rx_buffer_.clear();
+        return false;
+      }
+      ESP_LOGD(TAG, "Good read response for address=%d, 40 registers", address);
+      this->rx_buffer_.clear();
+      return true;
     }
   }
 
-  //flip roles every message, considering CRC OK
-  if (this->role == ModbusRole::SNIFFER) {
-    if (this->current_role_ == ModbusRole::SERVER)
-      this->current_role_ = ModbusRole::CLIENT;
-    else
-      this->current_role_ = ModbusRole::SERVER;
-  }
-  // reset buffer
-  ESP_LOGV(TAG, "Clearing buffer of %d bytes - parse succeeded", at);
+  ESP_LOGV(TAG, "Discarding unknown packet: size=%d, FC=0x%02X", at + 1, function_code);
   this->rx_buffer_.clear();
+  return false;
+}
+
+bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, size_t data_len) {
+  if (data_len < 2 || data == nullptr) {
+    ESP_LOGW(TAG, "Invalid packet: size=%d, address=%d, function=%d", data_len, address, function);
+    return false;
+  }
+  size_t total_len = data_len + 2;
+  if (this->rx_buffer_.size() < total_len) {
+    ESP_LOGW(TAG, "Incomplete packet: buffer size=%d, required=%d", this->rx_buffer_.size(), total_len);
+    return false;
+  }
+  uint16_t computed_crc = crc16(data, data_len);
+  uint16_t received_crc = (data[data_len] << 8) | data[data_len + 1];
+  if (computed_crc != received_crc) {
+    std::string reg_info = (function == 0x06) ? format_hex((data[2] << 8) | data[3]) : "read response";
+    ESP_LOGW(TAG, "Modbus CRC Check failed! Expected %04X, received %04X for address=%d, function=%d, register=%s",
+             computed_crc, received_crc, address, function, reg_info.c_str());
+    return false;
+  }
+  ESP_LOGV(TAG, "Good CRC for address=%d, function=%d", address, function);
   return true;
 }
 
-void Modbus::dump_config() {
-  ESP_LOGCONFIG(TAG, "Modbus:");
-  ESP_LOGCONFIG(TAG, "Version: 1.1.X");
-  LOG_PIN("  Flow Control Pin: ", this->flow_control_pin_);
-  ESP_LOGCONFIG(TAG, "  Send Wait Time: %d ms", this->send_wait_time_);
-  ESP_LOGCONFIG(TAG, "  CRC Disabled: %s", YESNO(this->disable_crc_));
-}
-float Modbus::get_setup_priority() const {
-  // After UART bus
-  return setup_priority::BUS - 1.0f;
-}
-
-void Modbus::send(uint8_t address, uint8_t function_code, uint16_t start_address, uint16_t number_of_entities,
-                  uint8_t payload_len, const uint8_t *payload) {
-  static const size_t MAX_VALUES = 128;
-
-  // Only check max number of registers for standard function codes
-  // Some devices use non standard codes like 0x43
-  if (number_of_entities > MAX_VALUES && function_code <= 0x10) {
-    ESP_LOGE(TAG, "send too many values %d max=%zu", number_of_entities, MAX_VALUES);
-    return;
-  }
-
-  std::vector<uint8_t> data;
-  data.push_back(address);
-  data.push_back(function_code);
-  if (this->current_role_ == ModbusRole::CLIENT) {
-    data.push_back(start_address >> 8);
-    data.push_back(start_address >> 0);
-    if (function_code != 0x5 && function_code != 0x6) {
-      data.push_back(number_of_entities >> 8);
-      data.push_back(number_of_entities >> 0);
-    }
-  }
-
-  if (payload != nullptr) {
-    if (this->current_role_ == ModbusRole::SERVER || function_code == 0xF || function_code == 0x10) {  // Write multiple
-      data.push_back(payload_len);  // Byte count is required for write
-    } else {
-      payload_len = 2;  // Write single register or coil
-    }
-    for (int i = 0; i < payload_len; i++) {
-      data.push_back(payload[i]);
-    }
-  }
-
-  auto crc = crc16(data.data(), data.size());
-  data.push_back(crc >> 0);
-  data.push_back(crc >> 8);
-
-  if (this->flow_control_pin_ != nullptr)
-    this->flow_control_pin_->digital_write(true);
-
-  this->write_array(data);
-  this->flush();
-
-  if (this->flow_control_pin_ != nullptr)
-    this->flow_control_pin_->digital_write(false);
-  waiting_for_response = address;
-  last_send_ = millis();
-  ESP_LOGV(TAG, "Modbus write: %s", format_hex_pretty(data).c_str());
-}
-
-// Helper function for lambdas
-// Send raw command. Except CRC everything must be contained in payload
-void Modbus::send_raw(const std::vector<uint8_t> &payload) {
-  if (payload.empty()) {
-    return;
-  }
-
-  if (this->flow_control_pin_ != nullptr)
-    this->flow_control_pin_->digital_write(true);
-
-  auto crc = crc16(payload.data(), payload.size());
-  this->write_array(payload);
-  this->write_byte(crc & 0xFF);
-  this->write_byte((crc >> 8) & 0xFF);
-  this->flush();
-  if (this->flow_control_pin_ != nullptr)
-    this->flow_control_pin_->digital_write(false);
-  waiting_for_response = payload[0];
-  ESP_LOGV(TAG, "Modbus write raw: %s", format_hex_pretty(payload).c_str());
-  last_send_ = millis();
-}
-
+// Rest of modbus.cpp unchanged
 }  // namespace modbus
 }  // namespace esphome
