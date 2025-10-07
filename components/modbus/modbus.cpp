@@ -37,7 +37,7 @@ void Modbus::loop() {
   if (now - this->last_modbus_byte_ > 50) {
     size_t at = this->rx_buffer_.size();
     if (at > 0) {
-      ESP_LOGV(TAG, "Clearing bufferT of %d bytes - timeout", at);
+      ESP_LOGW(TAG, "Clearing bufferT of %d bytes - timeout", at);
       this->rx_buffer_.clear();
     }
   }
@@ -66,7 +66,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     // Handle user-defined function, since we don't know how big this ought to be,
     // ideally we should delegate the entire length detection to whatever handler is
     // installed, but wait, there is the CRC, and if we get a hit there is a good
-    // chance that this is a complete message ... admittedly there is a small chance is
+    // chance that this is a complete message ... admittedly there is a small chance it
     // isn't but that is quite small given the purpose of the CRC in the first place
 
     // Fewer than 2 bytes can't calc CRC
