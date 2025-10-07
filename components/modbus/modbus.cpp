@@ -50,7 +50,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   const uint8_t *raw = &this->rx_buffer_[0];
   ESP_LOGVV(TAG, "Modbus received Byte  %d (0X%x)", byte, byte);
 
-
+// START Modify parse_modbus_byte_ to validate packets against the known patterns (01 06 or 01 03) and expected lengths (8 bytes for writes/requests, 84 bytes for read responses)
 bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, size_t data_len) {
   if (data_len < 2 || data == nullptr) {
     ESP_LOGW(TAG, "Invalid packet: size=%d, address=%d, function=%d", data_len, address, function);
@@ -75,8 +75,6 @@ bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, s
   
   
   // Byte 0: modbus address (match all)
-  // START Modify parse_modbus_byte_ to validate packets against the known patterns (01 06 or 01 03) and expected lengths (8 bytes for writes/requests, 84 bytes for read responses)
-
     if (at == 0) // Byte 0: Modbus address (expect 0x01)
     return byte == 0x01;
 
