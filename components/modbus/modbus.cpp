@@ -28,7 +28,7 @@ void Modbus::loop() {
     } else {
       size_t at = this->rx_buffer_.size();
       if (at > 0) {
-        ESP_LOGV(TAG, "Clearing buffer of %d bytes - parse failed", at);
+        ESP_LOGV(TAG, "Clearing bufferT of %d bytes - parse failed", at);
         this->rx_buffer_.clear();
       }
     }
@@ -37,7 +37,7 @@ void Modbus::loop() {
   if (now - this->last_modbus_byte_ > 50) {
     size_t at = this->rx_buffer_.size();
     if (at > 0) {
-      ESP_LOGV(TAG, "Clearing buffer of %d bytes - timeout", at);
+      ESP_LOGV(TAG, "Clearing bufferT of %d bytes - timeout", at);
       this->rx_buffer_.clear();
     }
   }
