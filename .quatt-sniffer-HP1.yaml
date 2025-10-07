@@ -34,7 +34,13 @@ uart:
   data_bits: 8
   parity: EVEN
   stop_bits: 1
-
+  rx_buffer_size: 2048
+  debug:
+    direction: RX         ## log only the incoming data from the RS485 bus (connected to the RX pin, GPIO20)
+    dummy_receiver: true  ## This mode configures the UART hardware to operate in a receive-only state, ignoring the TX functionality
+    after:
+      timeout: 50ms       ## try between 10ms - 150ms. Delimits packets after ..ms of inactivity. Try best value between 10ms and 150ms to suppress CRC errors and timeouts in logs. Also verify RS485 wiring (A/B lines, 120Ω termination resistor).
+      
 modbus:
   uart_id: uart_bus
   id: mod_bus
