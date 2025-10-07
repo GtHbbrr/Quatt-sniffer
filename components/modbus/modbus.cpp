@@ -49,30 +49,101 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   this->rx_buffer_.push_back(byte);    //so real size is one more
   const uint8_t *raw = &this->rx_buffer_[0];
   ESP_LOGVV(TAG, "Modbus received Byte  %d (0X%x)", byte, byte);
+  
   // Byte 0: modbus address (match all)
-  if (at == 0)
-    return true;
+  // START Modify parse_modbus_byte_ to validate packets against the known patterns (01 06 or 01 03) and expected lengths (8 bytes for writes/requests, 84 bytes for read responses)
+
+    if (at == 0) // Byte 0: Modbus address (expect 0x01)
+    return byte == 0x01;
+
+  if (at == 1) // Byte 1: Function code (expect 0x03 or 0x06)
+    return raw[1] == 0x03 || raw[1] == 0x06;
+
   uint8_t address = raw[0];
   uint8_t function_code = raw[1];
-  // Byte 2: Size (with modbus rtu function code 4/3)
-  // See also https://en.wikipedia.org/wiki/Modbus
-  if (at == 2)
-    return true;
-
-  uint8_t data_len = raw[2];
+  uint8_t data_len = 0;
   uint8_t data_offset = 3;
 
-  // Per https://modbus.org/docs/Modbus_Application_Protocol_V1_1b3.pdf Ch 5 User-Defined function codes
-  if (((function_code >= 65) && (function_code <= 72)) || ((function_code >= 100) && (function_code <= 110))) {
-    // Handle user-defined function, since we don't know how big this ought to be,
-    // ideally we should delegate the entire length detection to whatever handler is
-    // installed, but wait, there is the CRC, and if we get a hit there is a good
-    // chance that this is a complete message ... admittedly there is a small chance it
-    // isn't but that is quite small given the purpose of the CRC in the first place
+  if (at == 2) // Byte 2: Data length for 0x03, register high byte for 0x06
+    return true;
 
-    // Fewer than 2 bytes can't calc CRC
-    if (at < 2)
+  // Early discard of small packets
+  if (at < 4) {
+    ESP_LOGV(TAG, "Discarding small packet: size=%d", at + 1);
+    return true;
+  }
+
+  // Validate expected packet types
+  if (function_code == 0x06) { // Write single register (8 bytes)
+    if (at < 7) // Need address + function + register + value + CRC
       return true;
+
+    uint16_t register_addr = (raw[2] << 8) | raw[3];
+    // Expect registers 1999 (0x07CF), 2010 (0x07DA), 2015 (0x07DF), 3999 (0x0F9F)
+    if (register_addr != 0x07CF && register_addr != 0x07DA && register_addr != 0x07DF && register_addr != 0x0F9F) {
+      ESP_LOGV(TAG, "Discarding invalid write register: 0x%04X", register_addr);
+      this->rx_buffer_.clear();
+      return false;
+    }
+
+    if (at == 7) { // Full packet (8 bytes)
+      if (!this->check_crc(address, function_code, raw, 6)) {
+        ESP_LOGV(TAG, "Clearing buffer of %d bytes - CRC failed", at + 1);
+        this->rx_buffer_.clear();
+        return false;
+      }
+      ESP_LOGD(TAG, "Good write packet for address=%d, register=0x%04X", address, register_addr);
+      this->rx_buffer_.clear();
+      return true;
+    }
+  } else if (function_code == 0x03) { // Read holding registers
+    if (at == 3) { // Check request pattern: 01 03 08 33
+      if (raw[2] == 0x08 && raw[3] == 0x33) // Start register 2099 (0x0833)
+        return true;
+      ESP_LOGV(TAG, "Discarding invalid read request: start=0x%02X%02X", raw[2], raw[3]);
+      this->rx_buffer_.clear();
+      return false;
+    }
+    if (at == 5) { // Check request: 00 28 (40 registers)
+      if (raw[4] == 0x00 && raw[5] == 0x28)
+        return true;
+      ESP_LOGV(TAG, "Discarding invalid read count: 0x%02X%02X", raw[4], raw[5]);
+      this->rx_buffer_.clear();
+      return false;
+    }
+    if (at == 7 && raw[2] == 0x08) { // Full request (8 bytes)
+      if (!this->check_crc(address, function_code, raw, 6)) {
+        ESP_LOGV(TAG, "Clearing buffer of %d bytes - CRC failed", at + 1);
+        this->rx_buffer_.clear();
+        return false;
+      }
+      ESP_LOGD(TAG, "Good read request for address=%d, start=0x0833, count=40", address);
+      this->rx_buffer_.clear();
+      return true;
+    }
+    if (at == 2 && raw[2] == 0x50) { // Response: expect 80 data bytes
+      return true;
+    }
+    if (at < 84 && raw[2] == 0x50) // Response: wait for 80 data + 4 bytes
+      return true;
+    if (at == 84 && raw[2] == 0x50) { // Full response (84 bytes)
+      if (!this->check_crc(address, function_code, raw, 83)) {
+        ESP_LOGV(TAG, "Clearing buffer of %d bytes - CRC failed", at + 1);
+        this->rx_buffer_.clear();
+        return false;
+      }
+      ESP_LOGD(TAG, "Good read response for address=%d, 40 registers", address);
+      this->rx_buffer_.clear();
+      return true;
+    }
+  }
+
+  ESP_LOGV(TAG, "Discarding unknown packet: size=%d, FC=0x%02X", at + 1, function_code);
+  this->rx_buffer_.clear();
+  return false;
+}
+
+  // END Modify parse_modbus_byte_ to validate packets against the known patterns (01 06 or 01 03) and expected lengths (8 bytes for writes/requests, 84 bytes for read responses)
 
     data_len = at - 2;
     data_offset = 1;
