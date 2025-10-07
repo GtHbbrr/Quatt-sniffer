@@ -56,6 +56,7 @@ class Modbus : public uart::UARTDevice, public Component {
   uint16_t start_address_{0};
   uint16_t register_count{0};
   std::vector<ModbusDevice *> devices_;
+  size_t expected_packet_len_{0}; // Added to track expected packet length
 };
 
 class ModbusDevice {
