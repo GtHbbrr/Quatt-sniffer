@@ -11,7 +11,7 @@ external_components:
       #type: local
       #path: components
     components: [ modbus, modbus_controller ]
-    refresh: 5min  ## use this temporarily if you recently updated the repo, else disable for default 24h
+    refresh: 0s  ## use this temporarily if you recently updated the repo, else disable for default 24h
 
 # Enable logging
 #logger:
