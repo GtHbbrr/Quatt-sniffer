@@ -49,6 +49,30 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   this->rx_buffer_.push_back(byte);    //so real size is one more
   const uint8_t *raw = &this->rx_buffer_[0];
   ESP_LOGVV(TAG, "Modbus received Byte  %d (0X%x)", byte, byte);
+
+
+bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, size_t data_len) {
+  if (data_len < 2 || data == nullptr) {
+    ESP_LOGW(TAG, "Invalid packet: size=%d, address=%d, function=%d", data_len, address, function);
+    return false;
+  }
+  size_t total_len = data_len + 2;
+  if (this->rx_buffer_.size() < total_len) {
+    ESP_LOGW(TAG, "Incomplete packet: buffer size=%d, required=%d", this->rx_buffer_.size(), total_len);
+    return false;
+  }
+  uint16_t computed_crc = crc16(data, data_len);
+  uint16_t received_crc = (data[data_len] << 8) | data[data_len + 1];
+  if (computed_crc != received_crc) {
+    std::string reg_info = (function == 0x06) ? format_hex((data[2] << 8) | data[3]) : "read response";
+    ESP_LOGW(TAG, "Modbus CRC Check failed! Expected %04X, received %04X for address=%d, function=%d, register=%s", 
+             computed_crc, received_crc, address, function, reg_info.c_str());
+    return false;
+  }
+  ESP_LOGV(TAG, "Good CRC for address=%d, function=%d", address, function);
+  return true;
+}
+  
   
   // Byte 0: modbus address (match all)
   // START Modify parse_modbus_byte_ to validate packets against the known patterns (01 06 or 01 03) and expected lengths (8 bytes for writes/requests, 84 bytes for read responses)
