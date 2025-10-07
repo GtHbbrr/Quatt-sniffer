@@ -92,6 +92,20 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
   name: "HP1 - Working Mode set by CiC"
   register_type: holding
   address: 3999
+  
+- platform: modbus_controller
+  modbus_controller_id: modbus_device_1
+  name: "HP1 - new register 11160"
+  internal: true
+  register_type: holding
+  address: 11160  
+
+- platform: modbus_controller
+  modbus_controller_id: modbus_device_1
+  name: "HP1 - new register 11219"
+  internal: true
+  register_type: holding
+  address: 11219    
 
 ## next, use register_count: to make one read range from 2099 to 2138
 ## https://esphome.io/components/modbus_controller#optimizing-modbus-communications
@@ -149,7 +163,7 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
     - multiply: 1
     - clamp:
         min_value: 0
-        max_value: 100
+        max_value: 99
         ignore_out_of_range: true
 
 - platform: modbus_controller
@@ -166,7 +180,7 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
     - multiply: 1
     - clamp:
         min_value: 0
-        max_value: 100
+        max_value: 99
         ignore_out_of_range: true
 
 
@@ -227,6 +241,7 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
 - platform: modbus_controller
   modbus_controller_id: modbus_device_1
   name: "HP1 - Other bits R2108"
+  internal: true
   register_type: holding
   address: 2108
   bitmask: 0xf782   ## all the remaining bits
@@ -265,8 +280,8 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
     - offset: -3000
     - multiply: 0.01
     - clamp:
-        min_value: -30
-        max_value: 100
+        min_value: -29
+        max_value: 99
         ignore_out_of_range: true
 
 - platform: modbus_controller
@@ -283,8 +298,8 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
     - offset: -3000
     - multiply: 0.01
     - clamp:
-        min_value: -30
-        max_value: 100
+        min_value: 2
+        max_value: 63
         ignore_out_of_range: true
 
 - platform: modbus_controller
@@ -301,7 +316,7 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
     - offset: -3000
     - multiply: 0.01
     - clamp:
-        min_value: -30
+        min_value: -29
         max_value: 150
         ignore_out_of_range: true
 
@@ -320,8 +335,8 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
     - offset: -3000
     - multiply: 0.01
     - clamp:
-        min_value: -30
-        max_value: 100
+        min_value: -29
+        max_value: 99
         ignore_out_of_range: true
 
 - platform: modbus_controller
@@ -359,35 +374,46 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
         ignore_out_of_range: true
 
 ## Register 2118 (defrost) is placed into binary sensors in the next section
+- platform: modbus_controller
+  modbus_controller_id: modbus_device_1
+  name: "HP1 - Status bits R2118"
+  internal: True
+  register_type: holding
+  address: 2118
 
 ## Some of the register 2119 status bits placed into binary sensors in the next section
 - platform: modbus_controller
   modbus_controller_id: modbus_device_1
   name: "HP1 - Status bits R2119"
+  internal: True
   register_type: holding
   address: 2119
 
 - platform: modbus_controller
   modbus_controller_id: modbus_device_1
   name: "HP1 - Status bits R2120"
+  internal: True
   register_type: holding
   address: 2120
 
 - platform: modbus_controller
   modbus_controller_id: modbus_device_1
   name: "HP1 - Status bits R2121"
+  internal: True
   register_type: holding
   address: 2121
 
 - platform: modbus_controller
   modbus_controller_id: modbus_device_1
   name: "HP1 - Firmware Version"
+  internal: True
   register_type: holding
   address: 2122
 
 - platform: modbus_controller
   modbus_controller_id: modbus_device_1
   name: "HP1 - EEPROM Version"
+  internal: True
   register_type: holding
   address: 2123
   register_count: 8 ## fill gap for 2124-2130
@@ -406,8 +432,8 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
     - offset: -3000
     - multiply: 0.01
     - clamp:
-        min_value: -30
-        max_value: 100
+        min_value: -29
+        max_value: 99
         ignore_out_of_range: true
 
 - platform: modbus_controller
@@ -424,8 +450,8 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
     - offset: -3000
     - multiply: 0.01
     - clamp:
-        min_value: -30
-        max_value: 100
+        min_value: -29
+        max_value: 99
         ignore_out_of_range: true
 
 - platform: modbus_controller
@@ -442,8 +468,8 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
     - offset: -3000
     - multiply: 0.01
     - clamp:
-        min_value: -30
-        max_value: 100
+        min_value: -29
+        max_value: 99
         ignore_out_of_range: true
 
 - platform: modbus_controller
@@ -460,8 +486,8 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
     - offset: -3000
     - multiply: 0.01
     - clamp:
-        min_value: -30
-        max_value: 100
+        min_value: -29
+        max_value: 99
         ignore_out_of_range: true
 
 - platform: modbus_controller
@@ -479,8 +505,8 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
     - offset: -3000
     - multiply: 0.01
     - clamp:
-        min_value: -30
-        max_value: 100
+        min_value: -29
+        max_value: 99
         ignore_out_of_range: true
 
 - platform: modbus_controller
@@ -501,6 +527,7 @@ sensor: ## remember this setup MUST match the commands that a CIC sends to a Qua
   name: "HP1 - Pump Flow"
   register_type: holding
   address: 2138
+  internal: True
   unit_of_measurement: "L/h"
   device_class: "volume_flow_rate"
   state_class: "measurement"
