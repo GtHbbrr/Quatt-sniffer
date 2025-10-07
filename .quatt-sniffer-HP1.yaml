@@ -39,7 +39,7 @@ logger:
 uart:
   id: uart_bus
   # tx_pin: GPIO21    ## just listening: tx_pin not specified  BUT must kill TX output hardware trace anyway!
-  rx_pin: GPIO20      ## ${uart_rx_pin}
+  rx_pin: ${uart_rx_pin}
   baud_rate: 19200
   data_bits: 8
   parity: EVEN
