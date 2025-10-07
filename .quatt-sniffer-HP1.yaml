@@ -7,7 +7,7 @@ external_components:
   # use all components from GitHub repository
   - source:
       type: git
-      url: https://github.com/M10tech/Quatt-sniffer
+      url: https://github.com/GtHbbrr/Quatt-sniffer
       #type: local
       #path: components
     components: [ modbus, modbus_controller ]
