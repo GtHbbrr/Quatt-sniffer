@@ -142,7 +142,7 @@ bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, s
     return false;
   }
   uint16_t computed_crc = crc16(data, data_len);
-  uint16_t received_crc = (data[data_len] << 8) | data[data_len + 1];
+  uint16_t received_crc = (data[data_len + 1] << 8) | data[data_len]; // Fixed: Low byte first, high byte second
   if (computed_crc != received_crc) {
     uint16_t reg_addr = (function == 0x06) ? ((data[2] << 8) | data[3]) : 0;
     std::string reg_info = (function == 0x06) ? format_hex(static_cast<uint16_t>(reg_addr)) : "read response";
