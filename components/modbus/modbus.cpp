@@ -114,12 +114,10 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
       ESP_LOGD(TAG, "Good write packet for address=%d, register=0x%04X", address, register_addr);
-      if (this->current_role_ == ModbusRole::SERVER && this->parent_ != nullptr) {
-        std::vector<uint8_t> data(raw, raw + 8); // Full packet: address, FC, register, value, CRC
-        ESP_LOGD(TAG, "Forwarding write packet to modbus_controller: %s", format_hex_pretty(data).c_str());
-        this->parent_->on_modbus_data(data);
-      } else {
-        ESP_LOGW(TAG, "No modbus_controller parent set or not in SERVER mode, cannot forward write packet");
+      if (this->role == ModbusRole::SNIFFER) {
+        std::vector<uint8_t> data(this->rx_buffer_.begin() + 2, this->rx_buffer_.begin() + 6); // data_offset=2, data_len=4
+        ESP_LOGD(TAG, "Parsed write packet: FC=0x%02X, Start=0x%04X, Data=%s",
+                 function_code, register_addr, format_hex_pretty(data).c_str());
       }
       // Flip roles for SNIFFER mode
       if (this->role == ModbusRole::SNIFFER) {
@@ -188,12 +186,10 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
       ESP_LOGD(TAG, "Good read response for address=%d, 40 registers", address);
-      if (this->current_role_ == ModbusRole::SERVER && this->parent_ != nullptr) {
-        std::vector<uint8_t> data(raw, raw + 85); // Full packet: address, FC, byte count, data, CRC
-        ESP_LOGD(TAG, "Forwarding read response to modbus_controller: %s", format_hex_pretty(data).c_str());
-        this->parent_->on_modbus_data(data);
-      } else {
-        ESP_LOGW(TAG, "No modbus_controller parent set or not in SERVER mode, cannot forward read response");
+      if (this->role == ModbusRole::SNIFFER) {
+        std::vector<uint8_t> data(this->rx_buffer_.begin() + 3, this->rx_buffer_.begin() + 83); // data_offset=3, data_len=80
+        ESP_LOGD(TAG, "Parsed read response: FC=0x%02X, Start=0x0833, Data=%s",
+                 function_code, 0x0833, format_hex_pretty(data).c_str());
       }
       // Flip roles for SNIFFER mode
       if (this->role == ModbusRole::SNIFFER) {
@@ -217,7 +213,6 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   this->rx_buffer_.clear();
   this->expected_packet_len_ = 0;
   return false;
-
 } // END of bool Modbus::parse_modbus_byte_(uint8_t byte)
 
 bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, size_t data_len) {
