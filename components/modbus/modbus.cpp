@@ -124,7 +124,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
             this->register_count=0;
       }
       //ESP_LOGD(TAG, "Parsed write packet: FC=0x%02X, Start=0x%04X, Data=%s",
-               function_code, register_addr, format_hex_pretty(data).c_str());
+      //         function_code, register_addr, format_hex_pretty(data).c_str());
       ESP_LOGD(TAG, "good CRC as %s for address=%-5d with FC=%-2d, offset=%d and len=%-3d => start@%d #%d",
                 (this->current_role_ == ModbusRole::SERVER)?"server":"client",address,function_code,
                 data_offset,data_len,this->start_address_,this->register_count);
