@@ -134,6 +134,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       this->rx_buffer_.clear();
       this->expected_packet_len_ = 0;
       return true;
+      } 
     }
   } else if (function_code == 0x03) {
     if (at == 3 && raw[2] == 0x08) {
