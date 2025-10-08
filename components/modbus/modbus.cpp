@@ -37,7 +37,7 @@ void Modbus::loop() {
   if (now - this->last_modbus_byte_ > 50) {
     size_t at = this->rx_buffer_.size();
     if (at > 0) {
-      ESP_LOGD(TAG, "Clearing buffer of %d bytes - timeout, %s", at, format_hex_pretty(raw, at + 1 ).c_str());
+      ESP_LOGD(TAG, "Clearing buffer of %d bytes - timeout", at);
       this->rx_buffer_.clear();
     }
   }
