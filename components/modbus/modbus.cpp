@@ -48,7 +48,6 @@ void Modbus::loop() {
   }
 }
 
-
 bool Modbus::parse_modbus_byte_(uint8_t byte) {
   size_t at = this->rx_buffer_.size();
   this->rx_buffer_.push_back(byte);
@@ -114,11 +113,9 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
       ESP_LOGD(TAG, "Good write packet for address=%d, register=0x%04X", address, register_addr);
-      if (this->role == ModbusRole::SNIFFER) {
-        std::vector<uint8_t> data(this->rx_buffer_.begin() + 2, this->rx_buffer_.begin() + 6); // data_offset=2, data_len=4
-        ESP_LOGD(TAG, "Parsed write packet: FC=0x%02X, Start=0x%04X, Data=%s",
-                 function_code, register_addr, format_hex_pretty(data).c_str());
-      }
+      std::vector<uint8_t> data(this->rx_buffer_.begin() + 2, this->rx_buffer_.begin() + 6); // data_offset=2, data_len=4
+      ESP_LOGD(TAG, "Parsed write packet: FC=0x%02X, Start=0x%04X, Data=%s",
+               function_code, register_addr, format_hex_pretty(data).c_str());
       // Flip roles for SNIFFER mode
       if (this->role == ModbusRole::SNIFFER) {
         if (this->current_role_ == ModbusRole::SERVER) {
@@ -186,11 +183,9 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
       ESP_LOGD(TAG, "Good read response for address=%d, 40 registers", address);
-      if (this->role == ModbusRole::SNIFFER) {
-        std::vector<uint8_t> data(this->rx_buffer_.begin() + 3, this->rx_buffer_.begin() + 83); // data_offset=3, data_len=80
-        ESP_LOGD(TAG, "Parsed read response: FC=0x%02X, Start=0x0833, Data=%s",
-                 function_code, 0x0833, format_hex_pretty(data).c_str());
-      }
+      std::vector<uint8_t> data(this->rx_buffer_.begin() + 3, this->rx_buffer_.begin() + 83); // data_offset=3, data_len=80
+      ESP_LOGD(TAG, "Parsed read response: FC=0x%02X, Start=0x0833, Data=%s",
+               function_code, 0x0833, format_hex_pretty(data).c_str());
       // Flip roles for SNIFFER mode
       if (this->role == ModbusRole::SNIFFER) {
         if (this->current_role_ == ModbusRole::SERVER) {
@@ -207,12 +202,6 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       this->expected_packet_len_ = 0;
       return true;
     }
-  }
-
-  ESP_LOGV(TAG, "Discarding unknown packet: size=%d, FC=0x%02X", at + 1, function_code);
-  this->rx_buffer_.clear();
-  this->expected_packet_len_ = 0;
-  return false;
 } // END of bool Modbus::parse_modbus_byte_(uint8_t byte)
 
 bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, size_t data_len) {
