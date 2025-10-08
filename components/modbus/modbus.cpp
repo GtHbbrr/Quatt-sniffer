@@ -73,6 +73,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
 
   uint8_t address = raw[0];
   uint8_t function_code = raw[1];
+  uint8_t data_len = raw[2];
+  uint8_t data_offset = 2;
 
   if (at == 2) {
     if (function_code == 0x03 && raw[2] == 0x50) {
