@@ -108,7 +108,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
       ESP_LOGD(TAG, "Good write packet for address=%d, register=0x%04X", address, register_addr);
-      this->rx_buffer_.clear();
+      // this->rx_buffer_.clear();
       this->expected_packet_len_ = 0;
       return true;
     }
@@ -139,7 +139,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
       ESP_LOGD(TAG, "Good read request for address=%d, start=0x0833, count=40", address);
-      this->rx_buffer_.clear();
+      // this->rx_buffer_.clear();
       this->expected_packet_len_ = 0;
       return true;
     }
@@ -151,7 +151,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
       ESP_LOGD(TAG, "Good read response for address=%d, 40 registers", address);
-      this->rx_buffer_.clear();
+      // this->rx_buffer_.clear();
       this->expected_packet_len_ = 0;
       return true;
     }
