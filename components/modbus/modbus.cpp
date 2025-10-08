@@ -117,9 +117,11 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     uint16_t remote_crc = uint16_t(raw[data_offset + data_len]) | (uint16_t(raw[data_offset + data_len + 1]) << 8);
     if (computed_crc != remote_crc) {
       if (this->disable_crc_) {
-        ESP_LOGD(TAG, "Modbus CRC Check failed, but ignored! %02X!=%02X", computed_crc, remote_crc);
+        ESP_LOGD(TAG, "Modbus CRC Check for address=%-5d with FC=%-2d, offset=%d and len=%-3d failed, but ignored! %02X!=%02X",address,function_code,
+                data_offset,data_len, computed_crc, remote_crc);
       } else {
-        ESP_LOGW(TAG, "Modbus CRC Check failed! %02X!=%02X", computed_crc, remote_crc);
+        ESP_LOGW(TAG, "Modbus CRC Check for address=%-5d with FC=%-2d, offset=%d and len=%-3d failed! %02X!=%02X",address,function_code,
+                data_offset,data_len, computed_crc, remote_crc);
         return false;
       }
     }
