@@ -48,16 +48,16 @@ void Modbus::loop() {
   }
 }
 
+
 bool Modbus::parse_modbus_byte_(uint8_t byte) {
   size_t at = this->rx_buffer_.size();
   this->rx_buffer_.push_back(byte);
   const uint8_t *raw = &this->rx_buffer_[0];
   ESP_LOGVV(TAG, "Modbus received Byte %d (0X%x)", byte, byte);
 
-  // If we have an expected packet length, wait until we have all bytes
   if (this->expected_packet_len_ > 0) {
     if (at + 1 < this->expected_packet_len_) {
-      return true; // Keep accumulating bytes
+      return true;
     }
     if (at + 1 > this->expected_packet_len_) {
       ESP_LOGV(TAG, "Discarding packet: size=%d exceeds expected=%d", at + 1, this->expected_packet_len_);
@@ -67,23 +67,25 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     }
   }
 
-  if (at == 0) { // Byte 0: Modbus address (expect 0x01)
+  if (at == 0) {
     this->expected_packet_len_ = 0;
-    return byte == 0x01;
+    return byte == 0x01; // Match address 1
   }
 
-  if (at == 1) { // Byte 1: Function code (expect 0x03 or 0x06)
-    return raw[1] == 0x03 || raw[1] == 0x06;
+  if (at == 1) {
+    return raw[1] == 0x03 || raw[1] == 0x06; // Function codes 3 (read) or 6 (write)
   }
 
   uint8_t address = raw[0];
   uint8_t function_code = raw[1];
 
-  if (at == 2) { // Byte 2: Data length for 0x03, register high byte for 0x06
+  if (at == 2) {
     if (function_code == 0x03 && raw[2] == 0x50) {
-      this->expected_packet_len_ = 85; // 84 bytes + current byte
+      this->expected_packet_len_ = 85; // Read response: 1+1+1+80+2 = 85 bytes
     } else if (function_code == 0x03 && raw[2] == 0x08) {
-      this->expected_packet_len_ = 8; // Read request is 8 bytes
+      this->expected_packet_len_ = 8; // Read request: 1+1+2+2+2 = 8 bytes
+    } else if (function_code == 0x06) {
+      this->expected_packet_len_ = 8; // Write request: 1+1+2+2+2 = 8 bytes
     }
     return true;
   }
@@ -93,7 +95,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     return true;
   }
 
-  if (function_code == 0x06) { // Write single register (8 bytes)
+  if (function_code == 0x06) {
     if (at < 7) return true;
 
     uint16_t register_addr = (raw[2] << 8) | raw[3];
@@ -112,11 +114,30 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
       ESP_LOGD(TAG, "Good write packet for address=%d, register=0x%04X", address, register_addr);
-      // this->rx_buffer_.clear();
+      if (this->current_role_ == ModbusRole::SERVER && this->parent_ != nullptr) {
+        std::vector<uint8_t> data(raw, raw + 8); // Full packet: address, FC, register, value, CRC
+        ESP_LOGD(TAG, "Forwarding write packet to modbus_controller: %s", format_hex_pretty(data).c_str());
+        this->parent_->on_modbus_data(data);
+      } else {
+        ESP_LOGW(TAG, "No modbus_controller parent set or not in SERVER mode, cannot forward write packet");
+      }
+      // Flip roles for SNIFFER mode
+      if (this->role == ModbusRole::SNIFFER) {
+        if (this->current_role_ == ModbusRole::SERVER) {
+          ESP_LOGV(TAG, "Switching role from SERVER to CLIENT");
+          this->current_role_ = ModbusRole::CLIENT;
+        } else {
+          ESP_LOGV(TAG, "Switching role from CLIENT to SERVER");
+          this->current_role_ = ModbusRole::SERVER;
+        }
+      }
+      // Reset buffer
+      ESP_LOGV(TAG, "Clearing buffer of %d bytes - parse succeeded", at + 1);
+      this->rx_buffer_.clear();
       this->expected_packet_len_ = 0;
       return true;
     }
-  } else if (function_code == 0x03) { // Read holding registers
+  } else if (function_code == 0x03) {
     if (at == 3 && raw[2] == 0x08) {
       if (raw[3] == 0x33) {
         return true;
@@ -143,7 +164,19 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
       ESP_LOGD(TAG, "Good read request for address=%d, start=0x0833, count=40", address);
-      // this->rx_buffer_.clear();
+      // Flip roles for SNIFFER mode
+      if (this->role == ModbusRole::SNIFFER) {
+        if (this->current_role_ == ModbusRole::SERVER) {
+          ESP_LOGV(TAG, "Switching role from SERVER to CLIENT");
+          this->current_role_ = ModbusRole::CLIENT;
+        } else {
+          ESP_LOGV(TAG, "Switching role from CLIENT to SERVER");
+          this->current_role_ = ModbusRole::SERVER;
+        }
+      }
+      // Reset buffer
+      ESP_LOGV(TAG, "Clearing buffer of %d bytes - parse succeeded", at + 1);
+      this->rx_buffer_.clear();
       this->expected_packet_len_ = 0;
       return true;
     }
@@ -155,7 +188,26 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
       ESP_LOGD(TAG, "Good read response for address=%d, 40 registers", address);
-      // this->rx_buffer_.clear();
+      if (this->current_role_ == ModbusRole::SERVER && this->parent_ != nullptr) {
+        std::vector<uint8_t> data(raw, raw + 85); // Full packet: address, FC, byte count, data, CRC
+        ESP_LOGD(TAG, "Forwarding read response to modbus_controller: %s", format_hex_pretty(data).c_str());
+        this->parent_->on_modbus_data(data);
+      } else {
+        ESP_LOGW(TAG, "No modbus_controller parent set or not in SERVER mode, cannot forward read response");
+      }
+      // Flip roles for SNIFFER mode
+      if (this->role == ModbusRole::SNIFFER) {
+        if (this->current_role_ == ModbusRole::SERVER) {
+          ESP_LOGV(TAG, "Switching role from SERVER to CLIENT");
+          this->current_role_ = ModbusRole::CLIENT;
+        } else {
+          ESP_LOGV(TAG, "Switching role from CLIENT to SERVER");
+          this->current_role_ = ModbusRole::SERVER;
+        }
+      }
+      // Reset buffer
+      ESP_LOGV(TAG, "Clearing buffer of %d bytes - parse succeeded", at + 1);
+      this->rx_buffer_.clear();
       this->expected_packet_len_ = 0;
       return true;
     }
@@ -165,7 +217,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   this->rx_buffer_.clear();
   this->expected_packet_len_ = 0;
   return false;
-}
+
+} // END of bool Modbus::parse_modbus_byte_(uint8_t byte)
 
 bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, size_t data_len) {
   if (data_len < 2 || data == nullptr) {
