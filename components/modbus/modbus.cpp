@@ -202,7 +202,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       this->expected_packet_len_ = 0;
       return true;
     }
-} // END of bool Modbus::parse_modbus_byte_(uint8_t byte)
+  }
+}  // END of bool Modbus::parse_modbus_byte_(uint8_t byte)
 
 bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, size_t data_len) {
   if (data_len < 2 || data == nullptr) {
