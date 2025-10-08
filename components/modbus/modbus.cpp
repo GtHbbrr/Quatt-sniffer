@@ -118,10 +118,10 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     if (computed_crc != remote_crc) {
       if (this->disable_crc_ || (function_code == 3 && remote_crc == 0x00)) {     // also when remote_CRC=0x00
         ESP_LOGD(TAG, "Modbus CRC Check for address=%-5d with FC=%-2d, offset=%d and len=%-3d failed, but ignored! %02X!=%02X, packet=%s",address,function_code,
-                data_offset,data_len, computed_crc, remote_crc, , format_hex_pretty(data, data_len + 2).c_str());
+                data_offset,data_len, computed_crc, remote_crc, format_hex_pretty(data(this->rx_buffer_.begin() + data_offset, this->rx_buffer_.begin() + data_offset + data_len)).c_str());
       } else { 
         ESP_LOGW(TAG, "Modbus CRC Check for address=%-5d with FC=%-2d, offset=%d and len=%-3d failed! %02X!=%02X, packet=%s",address,function_code,
-                data_offset,data_len, computed_crc, remote_crc, , format_hex_pretty(data, data_len + 2).c_str());
+                data_offset,data_len, computed_crc, remote_crc, format_hex_pretty(data(this->rx_buffer_.begin() + data_offset, this->rx_buffer_.begin() + data_offset + data_len)).c_str());
         return false;
       }
     }
