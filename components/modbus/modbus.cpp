@@ -203,6 +203,11 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       return true;
     }
   }
+  
+  ESP_LOGV(TAG, "Discarding unknown packet: size=%d, FC=0x%02X", at + 1, function_code);
+  this->rx_buffer_.clear();
+  this->expected_packet_len_ = 0;
+  return false;
 }  // END of bool Modbus::parse_modbus_byte_(uint8_t byte)
 
 bool Modbus::check_crc(uint8_t address, uint8_t function, const uint8_t *data, size_t data_len) {
