@@ -43,11 +43,9 @@ class Modbus : public uart::UARTDevice, public Component {
 
  protected:
   GPIOPin *flow_control_pin_{nullptr};
-  uint32_t timeout_{200};
+
   ModbusRole current_role_;
   bool parse_modbus_byte_(uint8_t byte);
-  bool check_crc(uint8_t address, uint8_t function, const uint8_t *data, size_t data_len);
-  uint16_t crc16(const uint8_t *data, uint8_t len);
   uint16_t send_wait_time_{250};
   bool disable_crc_;
   std::vector<uint8_t> rx_buffer_;
@@ -56,7 +54,6 @@ class Modbus : public uart::UARTDevice, public Component {
   uint16_t start_address_{0};
   uint16_t register_count{0};
   std::vector<ModbusDevice *> devices_;
-  size_t expected_packet_len_{0}; // Added to track expected packet length
 };
 
 class ModbusDevice {
