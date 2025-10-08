@@ -109,19 +109,24 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
       ESP_LOGD(TAG, "Good write packet for address=%d, register=0x%04X", address, register_addr);
-      std::vector<uint8_t> data(this->rx_buffer_.begin() + 2, this->rx_buffer_.begin() + 6); // data_offset=2, data_len=4
-      ESP_LOGD(TAG, "Parsed write packet: FC=0x%02X, Start=0x%04X, Data=%s",
-               function_code, register_addr, format_hex_pretty(data).c_str());
-      // Flip roles for SNIFFER mode
+      //std::vector<uint8_t> data(this->rx_buffer_.begin() + 2, this->rx_buffer_.begin() + 6); // data_offset=2, data_len=4
+      std::vector<uint8_t> data(this->rx_buffer_.begin() + data_offset, this->rx_buffer_.begin() + data_offset + data_len);
       if (this->role == ModbusRole::SNIFFER) {
         if (this->current_role_ == ModbusRole::SERVER) {
-          ESP_LOGV(TAG, "Switching role from SERVER to CLIENT");
-          this->current_role_ = ModbusRole::CLIENT;
-        } else {
-          ESP_LOGV(TAG, "Switching role from CLIENT to SERVER");
-          this->current_role_ = ModbusRole::SERVER;
-        }
+          this->start_address_=uint16_t(data[1]) | (uint16_t(data[0]) << 8);
+          if (function_code == 0x3 || function_code == 0x4)
+            this->register_count=uint16_t(data[3]) | (uint16_t(data[2]) << 8);
+          else if (function_code == 0x5 || function_code == 0x06)
+            this->register_count=1;
+          else
+            this->register_count=0;
       }
+      //ESP_LOGD(TAG, "Parsed write packet: FC=0x%02X, Start=0x%04X, Data=%s",
+               function_code, register_addr, format_hex_pretty(data).c_str());
+      ESP_LOGD(TAG, "good CRC as %s for address=%-5d with FC=%-2d, offset=%d and len=%-3d => start@%d #%d",
+                (this->current_role_ == ModbusRole::SERVER)?"server":"client",address,function_code,
+                data_offset,data_len,this->start_address_,this->register_count);
+      
       // Reset buffer
       ESP_LOGV(TAG, "Clearing buffer of %d bytes - parse succeeded", at + 1);
       this->rx_buffer_.clear();
