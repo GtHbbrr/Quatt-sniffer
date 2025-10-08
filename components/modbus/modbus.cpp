@@ -26,9 +26,6 @@ void Modbus::loop() {
     this->read_byte(&byte);
     if (this->parse_modbus_byte_(byte)) {
       this->last_modbus_byte_ = now;
-      size_t at = this->rx_buffer_.size();
-      if (at > 0) {
-        ESP_LOGV(TAG, "Parsing buffer of %d bytes", at);
       }   
     } else {
       size_t at = this->rx_buffer_.size();
@@ -158,7 +155,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         this->expected_packet_len_ = 0;
         return false;
       }
-      ESP_LOGD(TAG, "Good read request for address=%d, start=0x0833, count=40", address);
+      ESP_LOGD(TAG, "Good read request for address=%d, start=0x0833|2099, count=40", address);
       // Flip roles for SNIFFER mode
       if (this->role == ModbusRole::SNIFFER) {
         if (this->current_role_ == ModbusRole::SERVER) {
@@ -184,8 +181,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       }
       ESP_LOGD(TAG, "Good read response for address=%d, 40 registers", address);
       std::vector<uint8_t> data(this->rx_buffer_.begin() + 3, this->rx_buffer_.begin() + 83); // data_offset=3, data_len=80
-      ESP_LOGD(TAG, "Parsed read response: FC=0x%02X, Start=0x0833, Data=%s",
-               function_code, 0x0833, format_hex_pretty(data).c_str());
+      ESP_LOGD(TAG, "Parsed read response: FC=0x%02X, Start=0x0833|2099, Data=%s",
+               function_code, format_hex_pretty(data).c_str());
       // Flip roles for SNIFFER mode
       if (this->role == ModbusRole::SNIFFER) {
         if (this->current_role_ == ModbusRole::SERVER) {
