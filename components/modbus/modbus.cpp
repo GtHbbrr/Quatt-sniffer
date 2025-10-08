@@ -26,6 +26,10 @@ void Modbus::loop() {
     this->read_byte(&byte);
     if (this->parse_modbus_byte_(byte)) {
       this->last_modbus_byte_ = now;
+      size_t at = this->rx_buffer_.size();
+      if (at > 0) {
+        ESP_LOGV(TAG, "Parsing buffer of %d bytes", at);
+      }   
     } else {
       size_t at = this->rx_buffer_.size();
       if (at > 0) {
