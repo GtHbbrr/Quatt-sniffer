@@ -34,23 +34,18 @@ class Modbus : public uart::UARTDevice, public Component {
             uint8_t payload_len = 0, const uint8_t *payload = nullptr);
   void send_raw(const std::vector<uint8_t> &payload);
   void set_role(ModbusRole role) { this->role = role; }
-  ModbusRole get_role() const { return this->role; } // Added getter for role
   void set_flow_control_pin(GPIOPin *flow_control_pin) { this->flow_control_pin_ = flow_control_pin; }
   uint8_t waiting_for_response{0};
   void set_send_wait_time(uint16_t time_in_ms) { send_wait_time_ = time_in_ms; }
   void set_disable_crc(bool disable_crc) { disable_crc_ = disable_crc; }
 
+  ModbusRole role;
+
  protected:
   GPIOPin *flow_control_pin_{nullptr};
 
-  ModbusRole role;
   ModbusRole current_role_;
   bool parse_modbus_byte_(uint8_t byte);
-  uint16_t crc16(const uint8_t *data, uint8_t len);
-  float get_control_loss_percentage() const;
-  float get_data_loss_percentage() const;
-  void log_loss_metrics();
-
   uint16_t send_wait_time_{250};
   bool disable_crc_;
   std::vector<uint8_t> rx_buffer_;
@@ -59,12 +54,6 @@ class Modbus : public uart::UARTDevice, public Component {
   uint16_t start_address_{0};
   uint16_t register_count{0};
   std::vector<ModbusDevice *> devices_;
-  uint32_t total_bytes_received_{0};        // Total bytes received
-  uint32_t control_crc_failed_bytes_{0};    // Bytes lost to CRC failures for control registers
-  uint32_t control_timeout_bytes_{0};       // Bytes lost to timeouts for control registers
-  uint32_t data_crc_failed_bytes_{0};       // Bytes lost to CRC failures for data registers
-  uint32_t data_timeout_bytes_{0};          // Bytes lost to timeouts for data registers
-  uint32_t last_metric_log_{0};             // Last time metrics were logged
 };
 
 class ModbusDevice {
@@ -80,6 +69,7 @@ class ModbusDevice {
     this->parent_->send(this->address_, function, start_address, number_of_entities, payload_len, payload);
   }
   void send_raw(const std::vector<uint8_t> &payload) { this->parent_->send_raw(payload); }
+  // If more than one device is connected block sending a new command before a response is received
   bool waiting_for_response() { return parent_->waiting_for_response != 0; }
 
  protected:
