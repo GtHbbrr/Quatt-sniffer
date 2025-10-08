@@ -39,13 +39,17 @@ class Modbus : public uart::UARTDevice, public Component {
   void set_send_wait_time(uint16_t time_in_ms) { send_wait_time_ = time_in_ms; }
   void set_disable_crc(bool disable_crc) { disable_crc_ = disable_crc; }
 
-  ModbusRole role;
-
  protected:
   GPIOPin *flow_control_pin_{nullptr};
 
+  ModbusRole role;
   ModbusRole current_role_;
   bool parse_modbus_byte_(uint8_t byte);
+  uint16_t crc16(const uint8_t *data, uint8_t len);
+  float get_control_loss_percentage() const;
+  float get_data_loss_percentage() const;
+  void log_loss_metrics();
+
   uint16_t send_wait_time_{250};
   bool disable_crc_;
   std::vector<uint8_t> rx_buffer_;
@@ -75,7 +79,6 @@ class ModbusDevice {
     this->parent_->send(this->address_, function, start_address, number_of_entities, payload_len, payload);
   }
   void send_raw(const std::vector<uint8_t> &payload) { this->parent_->send_raw(payload); }
-  // If more than one device is connected block sending a new command before a response is received
   bool waiting_for_response() { return parent_->waiting_for_response != 0; }
 
  protected:
