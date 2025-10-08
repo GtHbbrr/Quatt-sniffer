@@ -25,8 +25,7 @@ void Modbus::loop() {
     uint8_t byte;
     this->read_byte(&byte);
     if (this->parse_modbus_byte_(byte)) {
-      this->last_modbus_byte_ = now;
-      }   
+      this->last_modbus_byte_ = now;  
     } else {
       size_t at = this->rx_buffer_.size();
       if (at > 0) {
