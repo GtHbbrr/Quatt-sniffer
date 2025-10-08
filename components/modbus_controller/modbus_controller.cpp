@@ -242,7 +242,7 @@ void ModbusController::update_range_(RegisterRange &r) {
 // Once we get a response to the command it is removed from the queue and the next command is send
 //
 void ModbusController::update() {
-  if (this->parent_->role != modbus::ModbusRole::SNIFFER) {
+  if (this->parent_->get_role() != modbus::ModbusRole::SNIFFER) {
     if (!this->command_queue_.empty()) {
       ESP_LOGV(TAG, "%zu modbus commands already in queue", this->command_queue_.size());
     } else {
@@ -259,7 +259,7 @@ void ModbusController::update() {
 // walk through the sensors and determine the register ranges to read
 size_t ModbusController::create_register_ranges_() {
   this->register_ranges_.clear();
-  if (this->parent_->role == modbus::ModbusRole::CLIENT && this->sensorset_.empty()) {
+  if (this->parent_->get_role() == modbus::ModbusRole::CLIENT && this->sensorset_.empty()) {
     ESP_LOGW(TAG, "No sensors registered");
     return 0;
   }
@@ -398,7 +398,7 @@ void ModbusController::loop() {
     this->incoming_queue_.pop();
 
   } else {
-    if (this->parent_->role != modbus::ModbusRole::SNIFFER) {
+  if (this->parent_->get_role() != modbus::ModbusRole::SNIFFER) {
       // all messages processed send pending commands
       this->send_next_command_();
     }
