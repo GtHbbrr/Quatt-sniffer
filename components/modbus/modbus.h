@@ -54,6 +54,12 @@ class Modbus : public uart::UARTDevice, public Component {
   uint16_t start_address_{0};
   uint16_t register_count{0};
   std::vector<ModbusDevice *> devices_;
+  uint32_t total_bytes_received_{0};        // Total bytes received
+  uint32_t control_crc_failed_bytes_{0};    // Bytes lost to CRC failures for control registers
+  uint32_t control_timeout_bytes_{0};       // Bytes lost to timeouts for control registers
+  uint32_t data_crc_failed_bytes_{0};       // Bytes lost to CRC failures for data registers
+  uint32_t data_timeout_bytes_{0};          // Bytes lost to timeouts for data registers
+  uint32_t last_metric_log_{0};             // Last time metrics were logged
 };
 
 class ModbusDevice {
