@@ -9,7 +9,7 @@ namespace modbus {
 static const char *const TAG = "modbus";
 
 void Modbus::setup() {
-  ESP_LOGCONFIG(TAG, "Modbus timeout set to 50 ms");
+  ESP_LOGCONFIG(TAG, "Modbus timeout set to 300 ms");
   if (this->current_role_ == ModbusRole::SNIFFER) {
     ESP_LOGD(TAG, "Switching role from SNIFFER to SERVER");
     this->current_role_ = ModbusRole::SERVER;
@@ -33,7 +33,6 @@ void Modbus::loop() {
     } else {
       size_t at = this->rx_buffer_.size();
       if (at > 0) {
-        // Determine packet type for timeout metric
         const uint8_t *raw = &this->rx_buffer_[0];
         bool is_control = (at >= 4 && raw[1] == 0x06 && 
                           ((raw[2] << 8) | raw[3]) == 0x07CF ||
@@ -43,23 +42,25 @@ void Modbus::loop() {
         bool is_data = (at >= 3 && raw[1] == 0x03 && raw[2] == 0x50);
         if (is_control) {
           this->control_timeout_bytes_ += at;
-          ESP_LOGV(TAG, "Clearing buffer of %d bytes - parse failed (control): %s, control_loss=%.2f%%",
-                   at, format_hex_pretty(raw, at).c_str(), this->get_control_loss_percentage());
+          ESP_LOGD(TAG, "Clearing buffer of %d bytes - parse failed (control), control_loss=%.2f%%",
+                   at, this->get_control_loss_percentage());
         } else if (is_data) {
           this->data_timeout_bytes_ += at;
-          ESP_LOGV(TAG, "Clearing buffer of %d bytes - parse failed (data): %s, data_loss=%.2f%%",
-                   at, format_hex_pretty(raw, at).c_str(), this->get_data_loss_percentage());
+          ESP_LOGD(TAG, "Clearing buffer of %d bytes - parse failed (data), data_loss=%.2f%%",
+                   at, this->get_data_loss_percentage());
         } else {
-          this->data_timeout_bytes_ += at; // Default to data for unknown packets
-          ESP_LOGV(TAG, "Clearing buffer of %d bytes - parse failed: %s, data_loss=%.2f%%",
-                   at, format_hex_pretty(raw, at).c_str(), this->get_data_loss_percentage());
+          this->data_timeout_bytes_ += at;
+          ESP_LOGD(TAG, "Clearing buffer of %d bytes - parse failed, data_loss=%.2f%%",
+                   at, this->get_data_loss_percentage());
         }
         this->rx_buffer_.clear();
       }
     }
+    // Yield to avoid starving other tasks
+    yield();
   }
 
-  if (now - this->last_modbus_byte_ > 50) {
+  if (now - this->last_modbus_byte_ > 300) {
     size_t at = this->rx_buffer_.size();
     if (at > 0) {
       const uint8_t *raw = &this->rx_buffer_[0];
@@ -71,16 +72,16 @@ void Modbus::loop() {
       bool is_data = (at >= 3 && raw[1] == 0x03 && raw[2] == 0x50);
       if (is_control) {
         this->control_timeout_bytes_ += at;
-        ESP_LOGD(TAG, "Clearing buffer of %d bytes - timeout (control): %s, control_loss=%.2f%%",
-                 at, format_hex_pretty(raw, at).c_str(), this->get_control_loss_percentage());
+        ESP_LOGD(TAG, "Clearing buffer of %d bytes - timeout (control), control_loss=%.2f%%",
+                 at, this->get_control_loss_percentage());
       } else if (is_data) {
         this->data_timeout_bytes_ += at;
-        ESP_LOGD(TAG, "Clearing buffer of %d bytes - timeout (data): %s, data_loss=%.2f%%",
-                 at, format_hex_pretty(raw, at).c_str(), this->get_data_loss_percentage());
+        ESP_LOGD(TAG, "Clearing buffer of %d bytes - timeout (data), data_loss=%.2f%%",
+                 at, this->get_data_loss_percentage());
       } else {
-        this->data_timeout_bytes_ += at; // Default to data for unknown packets
-        ESP_LOGD(TAG, "Clearing buffer of %d bytes - timeout: %s, data_loss=%.2f%%",
-                 at, format_hex_pretty(raw, at).c_str(), this->get_data_loss_percentage());
+        this->data_timeout_bytes_ += at;
+        ESP_LOGD(TAG, "Clearing buffer of %d bytes - timeout, data_loss=%.2f%%",
+                 at, this->get_data_loss_percentage());
       }
       this->rx_buffer_.clear();
     }
@@ -113,10 +114,19 @@ void Modbus::log_loss_metrics() {
 
 bool Modbus::parse_modbus_byte_(uint8_t byte) {
   this->total_bytes_received_++; // Increment total bytes received
-  size_t at = this->rx_buffer_.size(); // at is size BEFORE the new byte is added
-  this->rx_buffer_.push_back(byte);    // so real size is one more
+  size_t at = this->rx_buffer_.size();
+  this->rx_buffer_.push_back(byte);
   const uint8_t *raw = &this->rx_buffer_[0];
-  ESP_LOGVV(TAG, "Modbus received Byte %d (0x%02X)", byte, byte);
+  ESP_LOGD(TAG, "Received byte %d (0x%02X)", byte, byte);
+
+  // Limit buffer size to prevent overflow
+  if (this->rx_buffer_.size() > 256) {
+    this->data_timeout_bytes_ += at + 1;
+    ESP_LOGD(TAG, "Buffer overflow, clearing %d bytes, data_loss=%.2f%%",
+             at + 1, this->get_data_loss_percentage());
+    this->rx_buffer_.clear();
+    return false;
+  }
 
   // Byte 0: modbus address (match all)
   if (at == 0)
@@ -125,27 +135,27 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   uint8_t address = raw[0];
   uint8_t function_code = raw[1];
 
-  // Byte 2: Size (with modbus rtu function code 4/3)
+  // Byte 2: Size (with modbus rtu function code 3/4)
   if (at == 2 && (function_code == 0x03 || function_code == 0x04)) {
     this->register_count = raw[2] / 2; // Number of registers
     return true;
   }
 
-  // Byte 3/4: Start address (with modbus rtu function code 6)
+  // Byte 3: Start address (with modbus rtu function code 6)
   if (at == 3 && function_code == 0x06) {
-    this->start_address_ = (raw[2] << 8) + raw[3];
+    this->start_address_ = (raw[2] << 8) | raw[3];
     return true;
   }
 
-  // Full packet received
+  // Full packet received: 0x03/0x04 (read response)
   if ((function_code == 0x03 || function_code == 0x04) && at == (this->register_count * 2 + 4)) {
     uint16_t crc = this->crc16(raw, this->register_count * 2 + 3);
-    uint16_t crc_received = (raw[this->register_count * 2 + 4] << 8) + raw[this->register_count * 2 + 3];
+    uint16_t crc_received = (raw[at] << 8) | raw[at - 1];
     bool crc_ok = crc == crc_received || disable_crc_;
     if (!crc_ok) {
-      this->data_crc_failed_bytes_ += at + 1; // Count bytes lost to CRC failure (data registers)
-      ESP_LOGV(TAG, "Modbus CRC Check failed! Expected 0x%04X, received 0x%04X, packet=%s, data_loss=%.2f%%",
-               crc, crc_received, format_hex_pretty(raw, at + 1).c_str(), this->get_data_loss_percentage());
+      this->data_crc_failed_bytes_ += at + 1;
+      ESP_LOGD(TAG, "CRC failed for read response, expected 0x%04X, received 0x%04X, data_loss=%.2f%%",
+               crc, crc_received, this->get_data_loss_percentage());
       for (auto *device : this->devices_) {
         if (device->address_ == address)
           device->on_modbus_error(function_code, 0x04);
@@ -154,6 +164,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       return false;
     }
     std::vector<uint8_t> data(this->rx_buffer_.begin() + 3, this->rx_buffer_.begin() + 3 + this->register_count * 2);
+    ESP_LOGD(TAG, "Good read response: FC=0x%02X, Start=0x%04X, Count=%u",
+             function_code, this->start_address_, this->register_count);
     for (auto *device : this->devices_) {
       if (device->address_ == address) {
         device->on_modbus_data(data);
@@ -165,15 +177,16 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     this->rx_buffer_.clear();
     return true;
   }
-  // Full packet received
+
+  // Full packet received: 0x06 (write request)
   if (function_code == 0x06 && at == 7) {
     uint16_t crc = this->crc16(raw, 6);
-    uint16_t crc_received = (raw[7] << 8) + raw[6];
+    uint16_t crc_received = (raw[7] << 8) | raw[6];
     bool crc_ok = crc == crc_received || disable_crc_;
     if (!crc_ok) {
-      this->control_crc_failed_bytes_ += at + 1; // Count bytes lost to CRC failure (control registers)
-      ESP_LOGV(TAG, "Modbus CRC Check failed! Expected 0x%04X, received 0x%04X, register=0x%04X, packet=%s, control_loss=%.2f%%",
-               crc, crc_received, this->start_address_, format_hex_pretty(raw, at + 1).c_str(), this->get_control_loss_percentage());
+      this->control_crc_failed_bytes_ += at + 1;
+      ESP_LOGD(TAG, "CRC failed for write request, register=0x%04X, expected 0x%04X, received 0x%04X, control_loss=%.2f%%",
+               this->start_address_, crc, crc_received, this->get_control_loss_percentage());
       for (auto *device : this->devices_) {
         if (device->address_ == address)
           device->on_modbus_error(function_code, 0x04);
@@ -182,6 +195,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       return false;
     }
     std::vector<uint8_t> data(this->rx_buffer_.begin() + 2, this->rx_buffer_.begin() + 6);
+    ESP_LOGD(TAG, "Good write request: FC=0x%02X, Register=0x%04X, Data=%s",
+             function_code, this->start_address_, format_hex_pretty(data).c_str());
     for (auto *device : this->devices_) {
       if (device->address_ == address) {
         device->on_modbus_data(data);
@@ -191,15 +206,16 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     this->rx_buffer_.clear();
     return true;
   }
-  // Return error
+
+  // Error packet: 0x83/0x84/0x86
   if (at == 4 && (function_code == 0x83 || function_code == 0x84 || function_code == 0x86)) {
     uint16_t crc = this->crc16(raw, 3);
-    uint16_t crc_received = (raw[4] << 8) + raw[3];
+    uint16_t crc_received = (raw[4] << 8) | raw[3];
     bool crc_ok = crc == crc_received || disable_crc_;
     if (!crc_ok) {
-      this->data_crc_failed_bytes_ += at + 1; // Count bytes lost to CRC failure (default to data)
-      ESP_LOGV(TAG, "Modbus CRC Check failed! Expected 0x%04X, received 0x%04X, packet=%s, data_loss=%.2f%%",
-               crc, crc_received, format_hex_pretty(raw, at + 1).c_str(), this->get_data_loss_percentage());
+      this->data_crc_failed_bytes_ += at + 1;
+      ESP_LOGD(TAG, "CRC failed for error packet, expected 0x%04X, received 0x%04X, data_loss=%.2f%%",
+               crc, crc_received, this->get_data_loss_percentage());
       this->rx_buffer_.clear();
       return false;
     }
@@ -210,16 +226,17 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     this->rx_buffer_.clear();
     return true;
   }
-  // Don't confirm package receipt before all bytes are received
-  if (function_code == 0x06 && at < 7)
-    return true;
-  if ((function_code == 0x03 || function_code == 0x04) && at < (this->register_count * 2 + 4))
-    return true;
 
-  // Default action for unhandled cases
-  this->data_timeout_bytes_ += at + 1; // Default to data for unknown packets
-  ESP_LOGV(TAG, "Discarding unknown packet: size=%d, FC=0x%02X: %s, data_loss=%.2f%%",
-           at + 1, function_code, format_hex_pretty(raw, at + 1).c_str(), this->get_data_loss_percentage());
+  // Continue accumulating bytes
+  if ((function_code == 0x06 && at < 7) || 
+      ((function_code == 0x03 || function_code == 0x04) && at < (this->register_count * 2 + 4))) {
+    return true;
+  }
+
+  // Discard unknown/invalid packets
+  this->data_timeout_bytes_ += at + 1;
+  ESP_LOGD(TAG, "Discarding unknown packet: size=%d, FC=0x%02X, data_loss=%.2f%%",
+           at + 1, function_code, this->get_data_loss_percentage());
   this->rx_buffer_.clear();
   return false;
 }
@@ -242,7 +259,7 @@ uint16_t Modbus::crc16(const uint8_t *data, uint8_t len) {
 
 void Modbus::dump_config() {
   ESP_LOGCONFIG(TAG, "Modbus:");
-  ESP_LOGCONFIG(TAG, "  Timeout: 50 ms");
+  ESP_LOGCONFIG(TAG, "  Timeout: 300 ms");
 }
 
 float Modbus::get_setup_priority() const { return setup_priority::DATA; }
@@ -293,7 +310,7 @@ void Modbus::send(uint8_t address, uint8_t function_code, uint16_t start_address
     this->flow_control_pin_->digital_write(false);
   waiting_for_response = address;
   last_send_ = millis();
-  ESP_LOGV(TAG, "Modbus write: %s", format_hex_pretty(data).c_str());
+  ESP_LOGD(TAG, "Modbus write: %s", format_hex_pretty(data).c_str());
 }
 
 void Modbus::send_raw(const std::vector<uint8_t> &payload) {
@@ -312,7 +329,7 @@ void Modbus::send_raw(const std::vector<uint8_t> &payload) {
   if (this->flow_control_pin_ != nullptr)
     this->flow_control_pin_->digital_write(false);
   waiting_for_response = payload[0];
-  ESP_LOGV(TAG, "Modbus write raw: %s", format_hex_pretty(payload).c_str());
+  ESP_LOGD(TAG, "Modbus write raw: %s", format_hex_pretty(payload).c_str());
   last_send_ = millis();
 }
 
