@@ -122,7 +122,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
                 data_offset,data_len, computed_crc, remote_crc, format_hex_pretty(raw, at + 1).c_str());
         
       } // END if (computed_crc != remote_crc)
-      else { START // else if (computed_crc != remote_crc)
+      else { // START else if (computed_crc != remote_crc)
         ESP_LOGW(TAG, "BAD! CRC as s% for address=%-5d with FC=%-2d, offset=%d and len=%-3d failed! %02X!=%02X, %s",(this->current_role_ == ModbusRole::SERVER)?"server":"client",address,function_code,
                 data_offset,data_len, computed_crc, remote_crc, format_hex_pretty(raw, at + 1 ).c_str());
         return false;
