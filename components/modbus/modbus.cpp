@@ -84,8 +84,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
 
     ESP_LOGD(TAG, "Modbus user-defined function %02X found", function_code);
 
-  } else {
-    // data starts at 2 and length is 4 for read registers commands
+  } else {  // NOT User-Defined, aka regular modbus function codes (only 0x3 & 06 on Quatt Modbus)
+    // data starts at 2 and length is 4 for read registers commands e.g. [01.03.08.33.00.28.B7.BB] 
     if (this->current_role_ == ModbusRole::SERVER && (function_code == 0x3 || function_code == 0x4)) {
       data_offset = 2;
       data_len = 4;
@@ -114,18 +114,23 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
 
     // Byte data_offset+len+1: CRC_HI (over all bytes)
     uint16_t computed_crc = crc16(raw, data_offset + data_len);
-    uint16_t remote_crc = uint16_t(raw[data_offset + data_len]) | (uint16_t(raw[data_offset + data_len + 1]) << 8);
+    uint16_t remote_crc = uint16_t(raw[data_offset + data_len]) | (uint16_t(raw[data_offset + data_len + 1]) << 8); 
+    
     if (computed_crc != remote_crc) {
       if (this->disable_crc_ || (function_code == 3 && remote_crc == 0x00)) {     // also when remote_CRC=0x00
-        ESP_LOGD(TAG, "Modbus CRC Check for address=%-5d with FC=%-2d, offset=%d and len=%-3d failed, but ignored! %02X!=%02X, %s",address,function_code,
+        ESP_LOGD(TAG, "BAD! CRC as %s for address=%-5d with FC=%-2d, offset=%d and len=%-3d failed, but ignored! %02X!=%02X, %s",(this->current_role_ == ModbusRole::SERVER)?"server":"client",address,function_code,
                 data_offset,data_len, computed_crc, remote_crc, format_hex_pretty(raw, at + 1).c_str());
-      } else { 
-        ESP_LOGW(TAG, "Modbus CRC Check for address=%-5d with FC=%-2d, offset=%d and len=%-3d failed! %02X!=%02X, %s",address,function_code,
+        
+      } // END if (computed_crc != remote_crc)
+      else { START // else if (computed_crc != remote_crc)
+        ESP_LOGW(TAG, "BAD! CRC as s% for address=%-5d with FC=%-2d, offset=%d and len=%-3d failed! %02X!=%02X, %s",(this->current_role_ == ModbusRole::SERVER)?"server":"client",address,function_code,
                 data_offset,data_len, computed_crc, remote_crc, format_hex_pretty(raw, at + 1 ).c_str());
         return false;
-      }
-    }
-  }
+            
+      } // // END else if (computed_crc != remote_crc)
+    } // END if (computed_crc != remote_crc)
+  } // END of NOT User-Defined, aka regular modbus function codes (only 0x3 & 0x6 on Quatt Modbus)
+  
   std::vector<uint8_t> data(this->rx_buffer_.begin() + data_offset, this->rx_buffer_.begin() + data_offset + data_len);
   if (this->role == ModbusRole::SNIFFER) {
     if (this->current_role_ == ModbusRole::SERVER) {
